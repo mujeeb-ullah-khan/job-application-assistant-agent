@@ -5,9 +5,45 @@ import os
 from datetime import date
 
 # ---------- Page setup ----------
-st.set_page_config(page_title="Job Application Assistant Agent", page_icon="💼")
-st.title("💼 Job/Internship Application Assistant Agent")
-st.write("Built for Kaggle's AI Agents Intensive Vibe Coding Capstone")
+st.set_page_config(page_title="Job Application Assistant Agent", page_icon="💼", layout="centered")
+
+st.markdown("""
+<style>
+.main-header {
+    padding: 1.8rem 2rem;
+    background: linear-gradient(135deg, #2563EB 0%, #1E40AF 100%);
+    border-radius: 14px;
+    margin-bottom: 1.5rem;
+}
+.main-header h1 {
+    color: white;
+    font-size: 1.9rem;
+    margin: 0;
+}
+.main-header p {
+    color: #DBEAFE;
+    margin: 0.3rem 0 0 0;
+    font-size: 0.95rem;
+}
+div[data-testid="stTextArea"] textarea {
+    border-radius: 10px;
+}
+div.stButton > button {
+    border-radius: 8px;
+    font-weight: 600;
+    padding: 0.5rem 1.2rem;
+}
+div[data-testid="stExpander"] {
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+}
+</style>
+
+<div class="main-header">
+    <h1>💼 Job/Internship Application Assistant Agent</h1>
+    <p>An AI agent that tailors cover letters and tracks your applications — built for Kaggle's AI Agents Intensive Vibe Coding Capstone</p>
+</div>
+""", unsafe_allow_html=True)
 
 # ---------- Connect to Gemini ----------
 api_key = st.secrets["GEMINI_API_KEY"]
