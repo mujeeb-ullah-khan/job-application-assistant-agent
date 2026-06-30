@@ -108,6 +108,21 @@ Format your response with clear headers: "COVER LETTER" and "SKILL MATCH".
     return response.text
 
 # ---------- UI: Tabs ----------
+# ---------- Sidebar ----------
+with st.sidebar:
+    st.markdown("### 👤 About")
+    st.write("Built by **Mujeeb Ullah Khan**")
+    st.write("Information Systems student, UIN Raden Intan Lampung")
+    st.markdown("---")
+    st.markdown("### 🛠 Built With")
+    st.write("- Google Gemini API")
+    st.write("- Function calling / tool use")
+    st.write("- Streamlit")
+    st.markdown("---")
+    st.markdown("### 🔗 Links")
+    st.write("[GitHub Repo](https://github.com/mujeeb-ullah-khan/job-application-assistant-agent)")
+    st.markdown("---")
+    st.caption("Built for Kaggle's AI Agents Intensive Vibe Coding Capstone 🚀")
 tab1, tab2 = st.tabs(["✍️ Generate Cover Letter", "📋 Application Tracker"])
 
 # --- Tab 1: Cover letter generator ---
