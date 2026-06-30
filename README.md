@@ -16,3 +16,4 @@ An AI agent built for Kaggle's AI Agents Intensive Vibe Coding Capstone.
 
 ## Try it
 See the full notebook here: https://www.kaggle.com/code/mujeebullahhan/capstone-project
+with the live Streamlit link: https://job-hunting-ai.streamlit.app/
