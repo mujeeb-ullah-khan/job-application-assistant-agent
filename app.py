@@ -1,6 +1,8 @@
 import streamlit as st
 from google import genai
 import json
+import PyPDF2
+import io
 import os
 from datetime import date
 
@@ -44,6 +46,14 @@ div[data-testid="stExpander"] {
     <p>An AI agent that tailors cover letters and tracks your applications — built for Kaggle's AI Agents Intensive Vibe Coding Capstone</p>
 </div>
 """, unsafe_allow_html=True)
+
+# ---------- PDF extraction ----------
+def extract_text_from_pdf(uploaded_file):
+    pdf_reader = PyPDF2.PdfReader(io.BytesIO(uploaded_file.read()))
+    text = ""
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
+    return text.strip()
 
 # ---------- Connect to Gemini ----------
 api_key = st.secrets["GEMINI_API_KEY"]
@@ -107,7 +117,6 @@ Format your response with clear headers: "COVER LETTER" and "SKILL MATCH".
     )
     return response.text
 
-# ---------- UI: Tabs ----------
 # ---------- Sidebar ----------
 with st.sidebar:
     st.markdown("### 👤 About")
@@ -123,13 +132,40 @@ with st.sidebar:
     st.write("[GitHub Repo](https://github.com/mujeeb-ullah-khan/job-application-assistant-agent)")
     st.markdown("---")
     st.caption("Built for Kaggle's AI Agents Intensive Vibe Coding Capstone 🚀")
+
+# ---------- UI: Tabs ----------
 tab1, tab2 = st.tabs(["✍️ Generate Cover Letter", "📋 Application Tracker"])
 
 # --- Tab 1: Cover letter generator ---
 with tab1:
-    st.subheader("Paste your resume and a job posting")
-    resume_text = st.text_area("Resume", height=200, placeholder="Paste your resume here...")
-    job_posting_text = st.text_area("Job Posting", height=200, placeholder="Paste the job posting here...")
+    st.subheader("Add your resume and a job posting")
+
+    # PDF upload option
+    uploaded_pdf = st.file_uploader("📄 Upload Resume (PDF)", type=["pdf"])
+
+    # Text paste option
+    pasted_resume = st.text_area(
+        "✍️ Or paste your resume here",
+        height=150,
+        placeholder="Paste your resume text here..."
+    )
+
+    # Logic: PDF takes priority over pasted text
+    resume_text = ""
+    if uploaded_pdf is not None:
+        resume_text = extract_text_from_pdf(uploaded_pdf)
+        st.success("✅ Resume extracted from PDF!")
+        with st.expander("Preview extracted text"):
+            st.write(resume_text)
+    elif pasted_resume.strip():
+        resume_text = pasted_resume
+        st.info("Using pasted resume text.")
+
+    job_posting_text = st.text_area(
+        "📋 Job Posting",
+        height=200,
+        placeholder="Paste the job posting here..."
+    )
 
     if st.button("Generate Cover Letter"):
         if resume_text.strip() and job_posting_text.strip():
@@ -170,7 +206,9 @@ with tab2:
                 new_status = st.selectbox(
                     "Update status",
                     ["Applied", "Interview Scheduled", "Offer", "Rejected"],
-                    index=["Applied", "Interview Scheduled", "Offer", "Rejected"].index(app['status']) if app['status'] in ["Applied", "Interview Scheduled", "Offer", "Rejected"] else 0,
+                    index=["Applied", "Interview Scheduled", "Offer", "Rejected"].index(
+                        app['status']
+                    ) if app['status'] in ["Applied", "Interview Scheduled", "Offer", "Rejected"] else 0,
                     key=f"status_{i}"
                 )
                 if st.button("Update", key=f"update_{i}"):
