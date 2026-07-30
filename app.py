@@ -12,6 +12,12 @@ st.set_page_config(page_title="Job Application Assistant Agent", page_icon="💼
 
 st.markdown("""
 <style>
+/* Remove top padding only */
+.block-container {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+}
+
 /* Compact header */
 .main-header {
     padding: 0.7rem 1.2rem;
@@ -53,7 +59,9 @@ st.markdown("""
 }
 
 /* Inputs and buttons */
-div[data-testid="stTextArea"] textarea { border-radius: 10px; }
+div[data-testid="stTextArea"] textarea {
+    border-radius: 10px;
+}
 div.stButton > button {
     border-radius: 8px;
     font-weight: 600;
@@ -62,17 +70,6 @@ div.stButton > button {
 div[data-testid="stExpander"] {
     border-radius: 10px;
     border: 1px solid #E2E8F0;
-}
-
-/* Remove top padding so header sits flush at top */
-.block-container {
-    padding-top: 0.5rem !important;
-}
-header[data-testid="stHeader"] {
-    display: none !important;
-}
-div[data-testid="stToolbar"] {
-    display: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -116,7 +113,8 @@ def log_application(company, role, status="Applied", notes=""):
 def update_application_status(company, role, new_status):
     applications = load_applications()
     for app in applications:
-        if app['company'].lower() == company.lower() and app['role'].lower() == role.lower():
+        if app['company'].lower() == company.lower() and \
+           app['role'].lower() == role.lower():
             app['status'] = new_status
     save_applications(applications)
 
@@ -157,7 +155,7 @@ def status_badge(status):
     }
     return badges.get(status, status)
 
-# ---------- Sidebar (Claude-style) ----------
+# ---------- Sidebar ----------
 with st.sidebar:
     st.markdown("## 💼 Job Agent")
     st.button("➕ New Application", use_container_width=True)
@@ -256,7 +254,9 @@ with tab2:
         st.info("No applications logged yet.")
     else:
         for i, app in enumerate(applications):
-            with st.expander(f"{app['role']} at {app['company']} — {status_badge(app['status'])}"):
+            with st.expander(
+                f"{app['role']} at {app['company']} — {status_badge(app['status'])}"
+            ):
                 st.write(f"**Date applied:** {app['date_applied']}")
                 st.write(f"**Notes:** {app['notes'] if app['notes'] else 'None'}")
                 new_status = st.selectbox(
@@ -264,7 +264,9 @@ with tab2:
                     ["Applied", "Interview Scheduled", "Offer", "Rejected"],
                     index=["Applied", "Interview Scheduled", "Offer", "Rejected"].index(
                         app['status']
-                    ) if app['status'] in ["Applied", "Interview Scheduled", "Offer", "Rejected"] else 0,
+                    ) if app['status'] in [
+                        "Applied", "Interview Scheduled", "Offer", "Rejected"
+                    ] else 0,
                     key=f"status_{i}"
                 )
                 if st.button("Update", key=f"update_{i}"):
@@ -285,7 +287,6 @@ with tab3:
         offer = len([a for a in applications if a['status'] == "Offer"])
         rejected = len([a for a in applications if a['status'] == "Rejected"])
 
-        # Metric cards
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("📁 Total", total)
         col2.metric("🔵 Applied", applied)
@@ -295,7 +296,6 @@ with tab3:
 
         st.divider()
 
-        # Bar chart
         df = pd.DataFrame({
             "Status": ["Applied", "Interview", "Offer", "Rejected"],
             "Count": [applied, interview, offer, rejected]
@@ -304,9 +304,12 @@ with tab3:
 
         st.divider()
 
-        # Recent applications
         st.subheader("🕐 Recent Applications")
-        recent = sorted(applications, key=lambda x: x['date_applied'], reverse=True)[:5]
+        recent = sorted(
+            applications,
+            key=lambda x: x['date_applied'],
+            reverse=True
+        )[:5]
         for app in recent:
             col1, col2, col3 = st.columns([2, 2, 1])
             col1.write(f"**{app['company']}**")
