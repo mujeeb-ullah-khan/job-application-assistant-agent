@@ -1,3 +1,6 @@
 streamlit
 google-genai
-pypdf2
+PyPDF2
+fpdf2
+python-docx
+pandas
