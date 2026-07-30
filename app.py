@@ -63,6 +63,17 @@ div[data-testid="stExpander"] {
     border-radius: 10px;
     border: 1px solid #E2E8F0;
 }
+
+/* Remove top padding so header sits flush at top */
+.block-container {
+    padding-top: 0.5rem !important;
+}
+header[data-testid="stHeader"] {
+    display: none !important;
+}
+div[data-testid="stToolbar"] {
+    display: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
