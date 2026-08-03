@@ -6,7 +6,10 @@ import io
 import os
 import pandas as pd
 from datetime import date
-from fpdf import FPDF
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from docx import Document
 
 # ---------- Page setup ----------
@@ -148,47 +151,35 @@ Format your response with clear headers: "COVER LETTER" and "SKILL MATCH".
     return response.text
 
 # ---------- Export functions ----------
-def clean_text_for_pdf(text):
-    replacements = {
-        '\u2019': "'", '\u2018': "'",
-        '\u201c': '"', '\u201d': '"',
-        '\u2013': '-', '\u2014': '-',
-        '\u2022': '*', '\u2026': '...',
-        '\u00a0': ' ', '\u2192': '->',
-        '\u2022': '-', '\u25cf': '-',
-        '\u2713': 'v', '\u2714': 'v',
-        '\u2716': 'x', '\u2718': 'x',
-    }
-    for char, replacement in replacements.items():
-        text = text.replace(char, replacement)
-    # Remove any remaining non-latin characters
-    text = text.encode('latin-1', errors='replace').decode('latin-1')
-    return text
-
 def export_to_pdf(text):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_margins(15, 15, 15)
-    pdf.set_auto_page_break(auto=True, margin=15)
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=20*mm,
+        rightMargin=20*mm,
+        topMargin=20*mm,
+        bottomMargin=20*mm
+    )
+    styles = getSampleStyleSheet()
+    story = []
 
     for line in text.split('\n'):
-        clean_line = clean_text_for_pdf(line)
-        if clean_line.strip() == "":
-            pdf.ln(4)
-        elif clean_line.strip().startswith("##") or clean_line.strip().startswith("**"):
-            heading = clean_line.replace("##", "").replace("**", "").strip()
-            pdf.set_font("Helvetica", style="B", size=13)
-            pdf.multi_cell(0, 8, heading)
-            pdf.set_font("Helvetica", size=11)
-        elif clean_line.strip().startswith("*") or clean_line.strip().startswith("-"):
-            bullet = "  " + clean_line.strip().lstrip("*-").strip()
-            pdf.set_font("Helvetica", size=11)
-            pdf.multi_cell(0, 7, "- " + bullet)
+        line = line.strip()
+        if line == "":
+            story.append(Spacer(1, 6))
+        elif line.startswith("##") or (line.startswith("**") and line.endswith("**")):
+            heading = line.replace("##", "").replace("**", "").strip()
+            story.append(Paragraph(f"<b>{heading}</b>", styles['Heading2']))
+        elif line.startswith("*") or line.startswith("-"):
+            bullet = line.lstrip("*-").strip()
+            story.append(Paragraph(f"• {bullet}", styles['Normal']))
         else:
-            pdf.set_font("Helvetica", size=11)
-            pdf.multi_cell(0, 7, clean_line)
+            story.append(Paragraph(line, styles['Normal']))
 
-    return bytes(pdf.output())
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 def export_to_docx(text):
     doc = Document()
