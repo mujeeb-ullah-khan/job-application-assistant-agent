@@ -148,21 +148,46 @@ Format your response with clear headers: "COVER LETTER" and "SKILL MATCH".
     return response.text
 
 # ---------- Export functions ----------
+def clean_text_for_pdf(text):
+    replacements = {
+        '\u2019': "'", '\u2018': "'",
+        '\u201c': '"', '\u201d': '"',
+        '\u2013': '-', '\u2014': '-',
+        '\u2022': '*', '\u2026': '...',
+        '\u00a0': ' ', '\u2192': '->',
+        '\u2022': '-', '\u25cf': '-',
+        '\u2713': 'v', '\u2714': 'v',
+        '\u2716': 'x', '\u2718': 'x',
+    }
+    for char, replacement in replacements.items():
+        text = text.replace(char, replacement)
+    # Remove any remaining non-latin characters
+    text = text.encode('latin-1', errors='replace').decode('latin-1')
+    return text
+
 def export_to_pdf(text):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", size=11)
     pdf.set_margins(15, 15, 15)
     pdf.set_auto_page_break(auto=True, margin=15)
+
     for line in text.split('\n'):
-        if line.strip() == "":
+        clean_line = clean_text_for_pdf(line)
+        if clean_line.strip() == "":
             pdf.ln(4)
-        elif line.startswith("**") and line.endswith("**"):
-            pdf.set_font("Helvetica", style="B", size=12)
-            pdf.multi_cell(0, 8, line.replace("**", ""))
+        elif clean_line.strip().startswith("##") or clean_line.strip().startswith("**"):
+            heading = clean_line.replace("##", "").replace("**", "").strip()
+            pdf.set_font("Helvetica", style="B", size=13)
+            pdf.multi_cell(0, 8, heading)
             pdf.set_font("Helvetica", size=11)
+        elif clean_line.strip().startswith("*") or clean_line.strip().startswith("-"):
+            bullet = "  " + clean_line.strip().lstrip("*-").strip()
+            pdf.set_font("Helvetica", size=11)
+            pdf.multi_cell(0, 7, "- " + bullet)
         else:
-            pdf.multi_cell(0, 7, line)
+            pdf.set_font("Helvetica", size=11)
+            pdf.multi_cell(0, 7, clean_line)
+
     return bytes(pdf.output())
 
 def export_to_docx(text):
