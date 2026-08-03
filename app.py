@@ -6,6 +6,8 @@ import io
 import os
 import pandas as pd
 from datetime import date
+from fpdf import FPDF
+from docx import Document
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="Job Application Assistant Agent", page_icon="💼", layout="wide")
@@ -145,6 +147,41 @@ Format your response with clear headers: "COVER LETTER" and "SKILL MATCH".
     )
     return response.text
 
+# ---------- Export functions ----------
+def export_to_pdf(text):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=11)
+    pdf.set_margins(15, 15, 15)
+    pdf.set_auto_page_break(auto=True, margin=15)
+    for line in text.split('\n'):
+        if line.strip() == "":
+            pdf.ln(4)
+        elif line.startswith("**") and line.endswith("**"):
+            pdf.set_font("Helvetica", style="B", size=12)
+            pdf.multi_cell(0, 8, line.replace("**", ""))
+            pdf.set_font("Helvetica", size=11)
+        else:
+            pdf.multi_cell(0, 7, line)
+    return bytes(pdf.output())
+
+def export_to_docx(text):
+    doc = Document()
+    doc.add_heading("Cover Letter & Skill Match", 0)
+    for line in text.split('\n'):
+        if line.strip() == "":
+            doc.add_paragraph("")
+        elif line.startswith("**") and line.endswith("**"):
+            p = doc.add_paragraph()
+            run = p.add_run(line.replace("**", ""))
+            run.bold = True
+        else:
+            doc.add_paragraph(line)
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 # ---------- Status badge helper ----------
 def status_badge(status):
     badges = {
@@ -225,9 +262,33 @@ with tab1:
         if resume_text.strip() and job_posting_text.strip():
             with st.spinner("Generating..."):
                 result = generate_application_materials(resume_text, job_posting_text)
-            st.markdown(result)
+            st.session_state['generated_result'] = result
         else:
             st.warning("Please fill in both the resume and job posting.")
+
+    if 'generated_result' in st.session_state:
+        st.markdown(st.session_state['generated_result'])
+        st.divider()
+        st.subheader("📥 Export")
+        col1, col2 = st.columns(2)
+        with col1:
+            pdf_bytes = export_to_pdf(st.session_state['generated_result'])
+            st.download_button(
+                label="⬇️ Download as PDF",
+                data=pdf_bytes,
+                file_name="cover_letter.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        with col2:
+            docx_bytes = export_to_docx(st.session_state['generated_result'])
+            st.download_button(
+                label="⬇️ Download as DOCX",
+                data=docx_bytes,
+                file_name="cover_letter.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
 
     st.divider()
     st.subheader("Log this application")
