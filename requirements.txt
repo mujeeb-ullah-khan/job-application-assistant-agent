@@ -1,6 +1,6 @@
 streamlit
 google-genai
 PyPDF2
-fpdf2
+reportlab
 python-docx
 pandas
