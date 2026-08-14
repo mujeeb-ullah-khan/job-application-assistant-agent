@@ -4,3 +4,5 @@ PyPDF2
 reportlab
 python-docx
 pandas
+google-auth-oauthlib
+google-api-python-client
