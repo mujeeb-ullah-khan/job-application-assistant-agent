@@ -11,19 +11,19 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from docx import Document
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
 
 # ---------- Page setup ----------
 st.set_page_config(page_title="Job Application Assistant Agent", page_icon="💼", layout="wide")
 
 st.markdown("""
 <style>
-/* Remove top padding only */
 .block-container {
     padding-top: 1rem !important;
     padding-bottom: 1rem !important;
 }
-
-/* Compact header */
 .main-header {
     padding: 0.7rem 1.2rem;
     background: linear-gradient(135deg, #2563EB 0%, #1E40AF 100%);
@@ -40,8 +40,6 @@ st.markdown("""
     margin: 0;
     font-size: 0.78rem;
 }
-
-/* Sidebar app items */
 .app-item {
     padding: 0.6rem 0.8rem;
     border-radius: 8px;
@@ -62,11 +60,7 @@ st.markdown("""
     font-size: 0.75rem;
     color: #64748B;
 }
-
-/* Inputs and buttons */
-div[data-testid="stTextArea"] textarea {
-    border-radius: 10px;
-}
+div[data-testid="stTextArea"] textarea { border-radius: 10px; }
 div.stButton > button {
     border-radius: 8px;
     font-weight: 600;
@@ -78,6 +72,45 @@ div[data-testid="stExpander"] {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# ---------- Gmail OAuth config ----------
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+REDIRECT_URI = "https://job-hunting-ai.streamlit.app"
+
+def create_oauth_flow():
+    client_config = {
+        "web": {
+            "client_id": st.secrets["GOOGLE_CLIENT_ID"],
+            "client_secret": st.secrets["GOOGLE_CLIENT_SECRET"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [REDIRECT_URI]
+        }
+    }
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI
+    )
+    return flow
+
+# ---------- Handle OAuth redirect ----------
+query_params = st.query_params
+if 'code' in query_params and 'gmail_credentials' not in st.session_state:
+    try:
+        flow = create_oauth_flow()
+        flow.fetch_token(code=query_params['code'])
+        st.session_state['gmail_credentials'] = {
+            'token': flow.credentials.token,
+            'refresh_token': flow.credentials.refresh_token,
+            'token_uri': flow.credentials.token_uri,
+            'client_id': flow.credentials.client_id,
+            'client_secret': flow.credentials.client_secret,
+            'scopes': list(flow.credentials.scopes)
+        }
+        st.query_params.clear()
+    except Exception as e:
+        st.error(f"Gmail connection error: {str(e)}")
 
 # ---------- PDF extraction ----------
 def extract_text_from_pdf(uploaded_file):
@@ -163,7 +196,6 @@ def export_to_pdf(text):
     )
     styles = getSampleStyleSheet()
     story = []
-
     for line in text.split('\n'):
         line = line.strip()
         if line == "":
@@ -176,7 +208,6 @@ def export_to_pdf(text):
             story.append(Paragraph(f"• {bullet}", styles['Normal']))
         else:
             story.append(Paragraph(line, styles['Normal']))
-
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
@@ -198,6 +229,79 @@ def export_to_docx(text):
     buffer.seek(0)
     return buffer.getvalue()
 
+# ---------- Gmail functions ----------
+def get_gmail_service():
+    creds_data = st.session_state.get('gmail_credentials')
+    if not creds_data:
+        return None
+    creds = Credentials(
+        token=creds_data['token'],
+        refresh_token=creds_data.get('refresh_token'),
+        token_uri=creds_data['token_uri'],
+        client_id=creds_data['client_id'],
+        client_secret=creds_data['client_secret'],
+        scopes=creds_data['scopes']
+    )
+    return build('gmail', 'v1', credentials=creds)
+
+def scan_emails_for_company(company):
+    service = get_gmail_service()
+    if not service:
+        return []
+    try:
+        query = f"from:{company.lower()}"
+        results = service.users().messages().list(
+            userId='me',
+            q=query,
+            maxResults=5
+        ).execute()
+        messages = results.get('messages', [])
+        emails = []
+        for msg in messages:
+            msg_data = service.users().messages().get(
+                userId='me',
+                id=msg['id'],
+                format='metadata',
+                metadataHeaders=['Subject', 'From', 'Date']
+            ).execute()
+            headers = msg_data['payload']['headers']
+            subject = next(
+                (h['value'] for h in headers if h['name'] == 'Subject'), 'No subject'
+            )
+            snippet = msg_data.get('snippet', '')
+            emails.append({
+                'company': company,
+                'subject': subject,
+                'snippet': snippet
+            })
+        return emails
+    except Exception as e:
+        st.error(f"Error reading Gmail: {str(e)}")
+        return []
+
+def analyze_email_with_gemini(email):
+    prompt = f"""
+Analyze this email from a company and determine the job application status.
+
+Company: {email['company']}
+Email subject: {email['subject']}
+Email preview: {email['snippet']}
+
+What is the application status based on this email?
+Choose EXACTLY one from:
+- Applied
+- Interview Scheduled
+- Offer
+- Rejected
+
+Respond with ONLY the status, nothing else.
+"""
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    return response.text.strip()
+
 # ---------- Status badge helper ----------
 def status_badge(status):
     badges = {
@@ -214,9 +318,7 @@ with st.sidebar:
     st.button("➕ New Application", use_container_width=True)
     st.markdown("---")
     st.markdown("#### 📋 Applications")
-
     applications = load_applications()
-
     if not applications:
         st.caption("No applications yet.")
     else:
@@ -231,8 +333,11 @@ with st.sidebar:
                         <div class="app-role">{app['role']}</div>
                     </div>
                     """, unsafe_allow_html=True)
-
     st.markdown("---")
+    if 'gmail_credentials' in st.session_state:
+        st.success("📧 Gmail Connected")
+    else:
+        st.caption("📧 Gmail not connected")
     st.write("[GitHub](https://github.com/mujeeb-ullah-khan/job-application-assistant-agent)")
     st.caption("Built by Mujeeb Ullah Khan")
 
@@ -245,19 +350,22 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------- UI: Tabs ----------
-tab1, tab2, tab3 = st.tabs(["✍️ Generate Cover Letter", "📋 Application Tracker", "📊 Statistics"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "✍️ Generate Cover Letter",
+    "📋 Application Tracker",
+    "📊 Statistics",
+    "📧 Gmail Sync"
+])
 
 # --- Tab 1: Cover letter generator ---
 with tab1:
     st.subheader("Add your resume and a job posting")
-
     uploaded_pdf = st.file_uploader("📄 Upload Resume (PDF)", type=["pdf"])
     pasted_resume = st.text_area(
         "✍️ Or paste your resume here",
         height=150,
         placeholder="Paste your resume text here..."
     )
-
     resume_text = ""
     if uploaded_pdf is not None:
         resume_text = extract_text_from_pdf(uploaded_pdf)
@@ -314,7 +422,6 @@ with tab1:
     with col2:
         role_input = st.text_input("Role")
     notes_input = st.text_input("Notes (optional)")
-
     if st.button("Log Application"):
         if company_input and role_input:
             log_application(company_input, role_input, notes=notes_input)
@@ -326,7 +433,6 @@ with tab1:
 with tab2:
     st.subheader("Your Applications")
     applications = load_applications()
-
     if not applications:
         st.info("No applications logged yet.")
     else:
@@ -354,7 +460,6 @@ with tab2:
 with tab3:
     st.subheader("📊 Application Statistics")
     applications = load_applications()
-
     if not applications:
         st.info("No applications logged yet. Start tracking to see statistics.")
     else:
@@ -372,7 +477,6 @@ with tab3:
         col5.metric("🔴 Rejected", rejected)
 
         st.divider()
-
         df = pd.DataFrame({
             "Status": ["Applied", "Interview", "Offer", "Rejected"],
             "Count": [applied, interview, offer, rejected]
@@ -380,7 +484,6 @@ with tab3:
         st.bar_chart(df.set_index("Status"))
 
         st.divider()
-
         st.subheader("🕐 Recent Applications")
         recent = sorted(
             applications,
@@ -392,3 +495,86 @@ with tab3:
             col1.write(f"**{app['company']}**")
             col2.write(app['role'])
             col3.write(status_badge(app['status']))
+
+# --- Tab 4: Gmail Sync ---
+with tab4:
+    st.subheader("📧 Gmail Auto-Sync")
+
+    if 'gmail_credentials' not in st.session_state:
+        st.info("""
+        Connect your Gmail to automatically detect interview invites,
+        rejections, and offers from companies you've applied to.
+        The agent will read emails from those companies and suggest
+        status updates automatically.
+        """)
+        st.warning("⚠️ This app is currently in testing mode — only pre-approved Gmail addresses can connect.")
+
+        flow = create_oauth_flow()
+        auth_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'
+        )
+        st.session_state['oauth_state'] = state
+        st.link_button(
+            "🔗 Connect Gmail Account",
+            auth_url,
+            use_container_width=True
+        )
+    else:
+        st.success("✅ Gmail connected successfully!")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔍 Scan All Companies for Updates", use_container_width=True):
+                applications = load_applications()
+                if not applications:
+                    st.warning("No applications logged yet.")
+                else:
+                    all_emails = []
+                    with st.spinner("Scanning your Gmail..."):
+                        for app in applications:
+                            emails = scan_emails_for_company(app['company'])
+                            all_emails.extend(emails)
+
+                    if not all_emails:
+                        st.info("No emails found from your tracked companies.")
+                    else:
+                        st.session_state['scanned_emails'] = all_emails
+                        st.success(f"Found {len(all_emails)} emails!")
+
+        with col2:
+            if st.button("🔌 Disconnect Gmail", use_container_width=True):
+                del st.session_state['gmail_credentials']
+                st.rerun()
+
+        if 'scanned_emails' in st.session_state:
+            st.divider()
+            st.subheader("📬 Emails Found")
+            for idx, email in enumerate(st.session_state['scanned_emails']):
+                with st.expander(f"{email['company']} — {email['subject'][:60]}"):
+                    st.write(f"**Preview:** {email['snippet']}")
+                    if st.button(
+                        "🤖 Analyze & Detect Status",
+                        key=f"analyze_{idx}"
+                    ):
+                        with st.spinner("Gemini is analyzing the email..."):
+                            detected_status = analyze_email_with_gemini(email)
+                        st.success(f"Detected status: **{detected_status}**")
+
+                        applications = load_applications()
+                        matching = [
+                            a for a in applications
+                            if a['company'].lower() == email['company'].lower()
+                        ]
+                        if matching:
+                            if st.button(
+                                f"✅ Update {email['company']} → {detected_status}",
+                                key=f"apply_{idx}"
+                            ):
+                                update_application_status(
+                                    email['company'],
+                                    matching[0]['role'],
+                                    detected_status
+                                )
+                                st.success("Status updated!")
+                                st.rerun()
