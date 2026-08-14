@@ -98,7 +98,10 @@ def create_oauth_flow():
 query_params = st.query_params
 if 'code' in query_params and 'gmail_credentials' not in st.session_state:
     try:
-        flow = create_oauth_flow()
+        if 'oauth_flow' in st.session_state:
+            flow = st.session_state['oauth_flow']
+        else:
+            flow = create_oauth_flow()
         flow.fetch_token(code=query_params['code'])
         st.session_state['gmail_credentials'] = {
             'token': flow.credentials.token,
@@ -109,6 +112,8 @@ if 'code' in query_params and 'gmail_credentials' not in st.session_state:
             'scopes': list(flow.credentials.scopes)
         }
         st.query_params.clear()
+        if 'oauth_flow' in st.session_state:
+            del st.session_state['oauth_flow']
     except Exception as e:
         st.error(f"Gmail connection error: {str(e)}")
 
@@ -516,6 +521,7 @@ with tab4:
             prompt='consent'
         )
         st.session_state['oauth_state'] = state
+        st.session_state['oauth_flow'] = flow
         st.link_button(
             "🔗 Connect Gmail Account",
             auth_url,
@@ -535,7 +541,6 @@ with tab4:
                         for app in applications:
                             emails = scan_emails_for_company(app['company'])
                             all_emails.extend(emails)
-
                     if not all_emails:
                         st.info("No emails found from your tracked companies.")
                     else:
@@ -560,7 +565,6 @@ with tab4:
                         with st.spinner("Gemini is analyzing the email..."):
                             detected_status = analyze_email_with_gemini(email)
                         st.success(f"Detected status: **{detected_status}**")
-
                         applications = load_applications()
                         matching = [
                             a for a in applications
